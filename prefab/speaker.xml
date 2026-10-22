@@ -1,0 +1,22 @@
+<prefab version="1.6.0">
+	<group name="instance=MOD/prefab/speaker.xml" pos="0 0 0" rot="0.0 0.0 0.0">
+		<group name="eye_space">
+			<location name="fp_action" tags="name=fp_action" pos="0.3 -0.45 -0.6" rot="2.5 2.5 2.5"/>
+			<location name="tp_action" tags="name=tp_action" pos="0.35 -0.25 -0.475" rot="0.0 0.0 5.0"/>
+			<location name="tp_action_crouch" tags="name=tp_action_crouch" pos="0.375 -0.4 -0.35" rot="0.0 -5.0 5.0"/>
+			<location name="tp_run" tags="name=tp_run" pos="0.3 -0.7 0.0" rot="-45.0 10.0 10.0"/>
+			<location name="tp_jump" tags="name=tp_jump" pos="0.4 -0.55 -0.15" rot="-10.8 0.0 30"/>
+			<location name="tp_crouch" tags="name=tp_crouch" pos="0.45 -0.6 0.0" rot="4 -9 21"/>
+			<location name="tp_swim" tags="name=tp_swim" pos="0.45 -0.3 -0.3" rot="40.0 -40.0 40.0"/>
+		</group>
+		<group name="tool_space">
+			<body dynamic="false">
+				<vox file="MOD/vox/items/speakerphone.vox" scale="0.5"/>
+			</body>
+			<location name="tp_action_rh" tags="name=tp_action_rh ik_hand" pos="0 0 0" rot="0.0 90.0 0.0"/>
+			<location name="tp_run_rh" tags="name=tp_run_rh ik_hand" pos="0 0 0" rot="0.0 90.0 0.0"/>
+			<location name="tp_crouch_rh" tags="name=tp_crouch_rh ik_hand" pos="0 0 0" rot="0.0 90.0 0.0"/>
+			<location name="muzzle" tags="name=muzzle" pos="-0.025 0.125 -0.30" rot="0 0 0"/>
+		</group>
+	</group>
+</prefab>

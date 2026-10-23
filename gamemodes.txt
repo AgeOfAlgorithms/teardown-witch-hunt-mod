@@ -1,4 +1,4 @@
-[Witch Hunt]
-en_name = Witch Hunt
-en_description = Secret witches hide among the players. Find them with journals and fire, kill them all - or die before the time runs out.
+[Wraith Hunt]
+en_name = Wraith Hunt
+en_description = Wraiths in human form hide among the players. Find them with journals and fire, kill them all - or die before the time runs out.
 path = witchhunt.lua

@@ -24,11 +24,11 @@
 SPIRIT_TIME = 15
 SPIRIT_COOLDOWN = 60
 FIRST_COOLDOWN = 30        -- s into the round before the first spirit
-CLAW_CD = 2
+CLAW_CD = 1.5              -- s between claw strikes (the user: a little faster, was 2)
 CLAW_REACH = 2.6           -- m from her eyes to a target's chest
 CLAW_COS = 0.55            -- cos of the strike's cone (~57 degrees)
 CLAW_DAMAGE = 0.34         -- of full health: 3 strikes kill
-BURN_REVEAL = 3            -- s of fire that force a human-form witch out
+BURN_REVEAL = 2            -- s of fire that force a human-form witch out (the user: 2, was 3)
 BURN_LOCK = 5              -- s after the last burn before she can strike (a forced spirit turns back then)
 FIRE_R = 0.9               -- m from the body to a fire that burns
 FIRE_DPS_SPIRIT = 0.12     -- of full health per s, a spirit in fire (humans: the engine's own fire damage)
@@ -519,6 +519,9 @@ local function hideSpirits()
 	local host = IsPlayerHost(GetLocalPlayer())
 	for p in pairs(CS.sp) do
 		if IsPlayerValid(p) then
+			-- her own character in third person (the user: the host's showed through her spirit - the invisible tags
+			-- alone don't hide the local player's): the game's own way to hide yourself, every frame
+			if p == GetLocalPlayer() then SetPlayerHidden(p) end
 			if host then
 				for _, b in ipairs(characterBodies(p)) do tagInvisible(p, b) end
 				tagInvisible(p, GetToolBody(p))
@@ -635,11 +638,11 @@ function whSpiritClientDraw()
 		elseif m.forced then txt = "BURNED OUT OF HIDING - you turn back " .. math.ceil(left(m.lock)) .. " s after the fire"
 		elseif left(m.lock) > 0 then txt = "BURNED - no strikes for " .. math.ceil(left(m.lock)) .. " s"
 		elseif left(m.claw) > 0 then txt = "claw in " .. string.format("%.1f", left(m.claw)) .. " s"
-		else txt = "LMB: claw   Space / Crouch: fly up / down   Q: back to human" end
+		else txt = "LMB: claw   Space / Crouch: fly up / down   Q: human form" end
 		whBigText(y - 22, 20, txt, 0.85, 0.92, 1.0, 0.9)
 	else
 		local cd = left(m.cd)
-		whBigText(y, 20, cd > 0 and ("spirit form in " .. math.ceil(cd) .. " s") or "Q: spirit form", 0.85, 0.5, 0.45, 0.85)
+		whBigText(y, 20, cd > 0 and ("wraith form in " .. math.ceil(cd) .. " s") or "Q: wraith form", 0.85, 0.5, 0.45, 0.85)
 		if m.burn > 0.05 then bar(UiCenter() - 100, y + 18, 200, 6, m.burn / BURN_REVEAL, 1, 0.45, 0.1) end
 	end
 end

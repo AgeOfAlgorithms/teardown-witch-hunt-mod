@@ -5,8 +5,8 @@
 -- Items lie around the map (spots found on floors, indoors preferred), more appear during the round (counts by the
 -- map's size, the players and the host's amount). E picks one up (a witch can't take the holy cross; a spirit takes
 -- nothing), G drops the held one, a death drops everything (a journal burns). Everyone has bare hands.
---   pistol (the game's gun) | knife: LMB stab | walkie-talkie: heard from wherever it is, hold LMB to talk into it
---   (Proximity Comms devices) | speakerphone: hold LMB, your voice carries | medkit: hold LMB 2 s, +50 health |
+--   pistol (the game's gun) | knife: LMB stab | walkie-talkie: heard from wherever it is, talks while in hand (RMB: off / on)
+--   (Proximity Comms devices) | speakerphone: in hand your voice carries far (RMB: off / on) | medkit: hold LMB 5 s, +50 health (RMB: the one in front) |
 --   journal: the name of a witch, for the reader only; put it down and it crumbles | flamethrower: hold LMB, fuel for
 --   ~2 witches | holy cross: hold LMB up, a spirit close in front is stunned | sensor: LMB, everyone's position 5 s
 
@@ -15,10 +15,14 @@ FLAMER_FUEL = 9            -- s of fire (FLAME_DPS 0.26: ~3.9 s kill a witch in 
 FLAMER_RANGE = 7
 KNIFE_DAMAGE, KNIFE_CD, KNIFE_RANGE = 0.25, 0.55, 1.9
 PUNCH_DAMAGE, PUNCH_CD, PUNCH_RANGE = 0.07, 0.6, 1.6
-MEDKIT_TIME, MEDKIT_HEAL = 2, 0.5
+MEDKIT_TIME, MEDKIT_HEAL = 5, 0.5   -- (s to apply it, on yourself or someone else - the user: 5)
+MEDKIT_REACH = 2.5          -- m: RMB heals the player in front this close
+MEDKIT_GRACE = 0.3          -- s off them before an RMB heal starts over
 CROSS_RANGE, CROSS_COS, CROSS_STUN, CROSS_CD = 4, 0.75, 4, 6
+CROSS_CHARGES = 2           -- stuns a cross holds (its tool ammo, shown); the last one cracks it to dust (the user)
 SENSOR_CD, SENSOR_SHOW = 20, 5
 PICK_RANGE = 2.2
+WH_PICKUP_ANY = false      -- (the sandbox TEST mod: true - an item already carried is taken anyway, full again)
 SPAWN_EVERY = 20           -- s between top-ups during the round
 SPAWN_AWAY = 15            -- m from every living player (nobody sees an item appear)
 
@@ -57,6 +61,19 @@ function whItemsServerInit()
 	for _, k in ipairs(ITEM_KINDS) do
 		local d = ITEM_DEF[k]
 		if d.group then RegisterTool(d.tool, d.label, "MOD/prefab/" .. k .. ".xml", d.group) end
+	end
+	whHideToolCounts()
+end
+
+-- A TOOL WITH NO AMMO CAN'T BE SELECTED: greyed out in the bar, scroll and number keys skip it (the user, in the
+-- sandbox: only the gun and the flamethrower would equip; the tests switch tools by script and never saw it). So
+-- every item without ammo holds 1, never used up (as the game's capture-the-flag tool), and its count is hidden: the
+-- HUD (data/ui/hud.lua) draws game.tool.<id>.ammo.display instead of the number when the key exists, nothing for ""
+function whNoAmmo(kind) return kind ~= "gun" and kind ~= "flamer" and kind ~= "cross" end   -- (the cross: its charges)
+function whHideToolCounts()
+	SetString("game.tool.wh_fists.ammo.display", "")
+	for _, k in ipairs(ITEM_KINDS) do
+		if whNoAmmo(k) then SetString("game.tool." .. ITEM_DEF[k].tool .. ".ammo.display", "") end
 	end
 end
 
@@ -143,7 +160,7 @@ local function spawnItem(kind, t, ammo)
 end
 
 local function defaultAmmo(kind)
-	if kind == "gun" then return PISTOL_AMMO elseif kind == "flamer" then return FLAMER_FUEL end
+	if kind == "gun" then return PISTOL_AMMO elseif kind == "flamer" then return FLAMER_FUEL elseif kind == "cross" then return CROSS_CHARGES end
 	return 0
 end
 
@@ -264,11 +281,14 @@ local function give(p, kind, ammo)
 			whFx("pickup", p)
 			return true
 		end
-		note(p, "You already carry a " .. d.label:lower() .. ".")
-		return false
+		if not WH_PICKUP_ANY then
+			note(p, "You already carry a " .. d.label:lower() .. ".")
+			return false
+		end
+		SetToolEnabled(tool, false, p)                           -- (the sandbox: taken anyway - full again, a new page)
 	end
 	SetToolEnabled(tool, true, p)
-	SetToolAmmo(tool, ammo or 0, p)
+	SetToolAmmo(tool, whNoAmmo(kind) and 1 or (ammo or 0), p)   -- (1: selectable - whHideToolCounts)
 	SetPlayerTool(tool, p)
 	if kind == "journal" then
 		local w = math.random() < JOURNAL_HUMAN and journalHuman(p) or nil
@@ -342,7 +362,7 @@ local function dropTool(p, tool, throw)
 	local ammo = GetToolAmmo(tool, p)
 	SetToolEnabled(tool, false, p)
 	SetToolAmmo(tool, 0, p)
-	if (kind == "gun" or kind == "flamer") and ammo <= 0 then return end   -- (spent: gone)
+	if not whNoAmmo(kind) and ammo <= 0 then return end         -- (spent: gone)
 	local e = eye(p)
 	local pos = throw and VecAdd(e.pos, VecScale(fwdOf(e), 0.6)) or VecAdd(GetPlayerTransform(p).pos, Vec((math.random() - 0.5) * 0.8, 0.6, (math.random() - 0.5) * 0.8))
 	local body = spawnItem(kind, Transform(pos, QuatEuler(0, math.random() * 360, 0)), ammo)
@@ -437,6 +457,7 @@ local function cross(p, h)
 	if not InputDown("usetool", p) or GetTime() < h.crossCd then return end
 	local e = eye(p)
 	local f = fwdOf(e)
+	local used = false
 	for q in Players() do
 		if q ~= p and whServerIsSpirit(q) and GetPlayerHealth(q) > 0 then
 			local c = VecAdd(GetPlayerTransform(q).pos, Vec(0, 1.3, 0))
@@ -445,11 +466,21 @@ local function cross(p, h)
 			if d <= CROSS_RANGE and d > 0.01 and VecDot(VecScale(to, 1 / d), f) >= CROSS_COS and whClear(e.pos, c) then
 				if whStun(q, CROSS_STUN, p) then
 					h.crossCd = GetTime() + CROSS_CD
-					whFx("crossflash", p, VecAdd(e.pos, VecScale(f, 0.5)))
+					if not used then whFx("crossflash", p, VecAdd(e.pos, VecScale(f, 0.5))) end
+					used = true
 				end
 			end
 		end
 	end
+	if not used then return end                                -- (a charge per raise that stuns - one or more wraiths)
+	local left = math.max(0, GetToolAmmo("wh_cross", p) - 1)
+	SetToolAmmo("wh_cross", left, p)
+	if left > 0 then return end
+	SetToolEnabled("wh_cross", false, p)                        -- (its last: it cracks and crumbles)
+	SetPlayerTool("wh_fists", p)
+	whFx("crosscrack", p, VecAdd(e.pos, VecScale(f, 0.5)))
+	note(p, "The cross cracks and crumbles to dust.")
+	whLog("cross cracked p=" .. p)
 end
 
 local function sensor(p, h)
@@ -468,24 +499,54 @@ local function sensor(p, h)
 	whFx("sensor", p)
 end
 
+local function grabbing(p)
+	local b = GetPlayerGrabBody(p)
+	if b and b ~= 0 then return true end
+	b = GetPlayerPickBody(p)
+	return b and b ~= 0 and IsBodyDynamic(b) or false               -- (RMB is the game's grab: a loose thing in reach)
+end
+
+-- the medkit: LMB held MEDKIT_TIME s heals its holder; RMB held as long heals the living player in front within
+-- MEDKIT_REACH m (the user) - losing them on the way starts over. Used up either way.
+local function medTarget(p)
+	local e = eye(p)
+	local hit, _, _, q = QueryShot(e.pos, fwdOf(e), MEDKIT_REACH, 0.3, p)
+	if hit and q and q ~= 0 and q ~= p and IsPlayerValid(q) and GetPlayerHealth(q) > 0 and not whServerIsSpirit(q) then return q end
+	return nil
+end
+
+-- (the user: on someone else it must take as long as on yourself - so a moment off them (their animation, a step,
+-- a frame's miss) doesn't start over, only MEDKIT_GRACE s of it; and only a thing really held blocks RMB: the
+-- one in front may count as "pickable")
 local function medkit(p, h, dt)
-	if InputDown("usetool", p) then
-		h.med = h.med + dt
-		if h.med >= MEDKIT_TIME then
-			h.med = 0
-			SetPlayerHealth(math.min(1, GetPlayerHealth(p) + MEDKIT_HEAL), p)
-			SetToolEnabled("wh_medkit", false, p)
-			SetPlayerTool("wh_fists", p)
-			whFx("medkit", p)
-		end
-	else
-		h.med = 0
+	local who = nil
+	if InputDown("usetool", p) then who = p
+	elseif InputDown("rmb", p) and (GetPlayerGrabBody(p) or 0) == 0 then
+		who = medTarget(p)
+		if who then h.medSeen = GetTime()
+		elseif h.medWho and h.medWho ~= p and GetTime() - (h.medSeen or -100) < MEDKIT_GRACE then who = h.medWho end
 	end
+	if not who or who ~= h.medWho then h.med = 0 end
+	h.medWho = who
+	if not who then return nil end
+	SetPlayerParam("walkingSpeed", 0, p)                       -- (the user: crouched at it, not moving - one frame each)
+	SetPlayerParam("jumpSpeed", 0, p)
+	h.med = h.med + dt
+	if h.med >= MEDKIT_TIME then
+		h.med, h.medWho = 0, nil
+		SetPlayerHealth(math.min(1, GetPlayerHealth(who) + MEDKIT_HEAL), who)
+		SetToolEnabled("wh_medkit", false, p)
+		SetPlayerTool("wh_fists", p)
+		whLog("medkit p=" .. p .. " healed=" .. who)
+		return nil
+	end
+	return who                                                  -- (still at it: shared.whMed - crouched, the bandage sound)
 end
 
 -- walkie-talkies and the speakerphone through Proximity Comms' devices: every walkie (carried, or lying anywhere)
--- plays the one channel; a player talks into theirs while holding it with LMB down. The speakerphone carries its
--- holder's voice far while LMB is down.
+-- plays the one channel, in hand or not. A player talks into theirs while it is in their hand and switched on - voice
+-- and typed lines alike (the user: a typer can't type with a mouse button held) - RMB switches it off and on (on at
+-- first; h.walkieOff). The speakerphone the same: in hand and on, its holder's voice carries far (h.speakerOff).
 local function devices()
 	local seen = {}
 	for p in Players() do
@@ -497,9 +558,14 @@ local function devices()
 		if alive and IsToolEnabled("wh_speaker", p) then
 			setDevice("whsp" .. p, "loudspeaker channel=whsp" .. p .. " at=player:" .. p, seen)
 		end
-		if alive and not whServerIsSpirit(p) and InputDown("usetool", p) and not GetBool("proxchat.typing." .. p) then
-			local tool = GetPlayerTool(p)
-			if tool == "wh_walkie" then tx = "whwalkie" elseif tool == "wh_speaker" then tx = "whsp" .. p end
+		if alive and not whServerIsSpirit(p) then
+			local tool, typing = GetPlayerTool(p), GetBool("proxchat.typing." .. p)
+			local key = tool == "wh_walkie" and "walkieOff" or tool == "wh_speaker" and "speakerOff" or nil
+			if key then
+				local h = hs(p)
+				if InputPressed("rmb", p) and not typing and not grabbing(p) then h[key] = not h[key] end
+				if not h[key] then tx = tool == "wh_walkie" and "whwalkie" or "whsp" .. p end
+			end
 		end
 		SetString("proxchat.tx." .. p, tx)
 	end
@@ -535,8 +601,10 @@ function whItemsTick(dt, playing)
 	local t = GetTime()
 	if not playing then
 		if next(IS.devices) then clearDevices() end
+		if type(shared.whMed) == "table" and next(shared.whMed) then shared.whMed = {} end
 		return
 	end
+	local med = {}                                              -- [healer] = who they heal, this tick
 	for b, it in pairs(IS.world) do                             -- (a destroyed or fallen-away item)
 		if not IsHandleValid(b) or GetBodyTransform(b).pos[2] < -100 then IS.world[b] = nil end
 	end
@@ -546,6 +614,7 @@ function whItemsTick(dt, playing)
 			if t - IS.regenT > 0.5 and GetPlayerParam("healthRegeneration", p) ~= false then SetPlayerRegenerationState(false, p) end
 			if not whServerIsSpirit(p) then
 				if not IsToolEnabled("wh_fists", p) then SetToolEnabled("wh_fists", true, p) end
+				if GetToolAmmo("wh_fists", p) < 1 then SetToolAmmo("wh_fists", 1, p) end   -- (selectable: whHideToolCounts)
 				local tool = GetPlayerTool(p)
 				if InputPressed("interact", p) then tryPickup(p) end
 				if h.journal then                                    -- (put down: switched to something else)
@@ -559,17 +628,22 @@ function whItemsTick(dt, playing)
 				elseif tool == "wh_flamer" then flamer(p, h, dt)
 				elseif tool == "wh_cross" then cross(p, h)
 				elseif tool == "wh_sensor" then sensor(p, h)
-				elseif tool == "wh_medkit" then medkit(p, h, dt) end
+				elseif tool == "wh_medkit" then med[p] = medkit(p, h, dt) end
 				if tool ~= "wh_flamer" then h.flame = false end
 				if tool ~= "wh_medkit" then h.med = 0 end
 				if t - h.stateT >= 0.25 then
 					h.stateT = t
-					ClientCall(p, "client.whItemState", math.max(0, h.sensorCd - t), math.max(0, h.crossCd - t), h.med)
+					ClientCall(p, "client.whItemState", math.max(0, h.sensorCd - t), math.max(0, h.crossCd - t), h.med, not h.walkieOff, not h.speakerOff)
 				end
 			end
 		end
 	end
 	if t - IS.regenT > 0.5 then IS.regenT = t end
+	local was = type(shared.whMed) == "table" and shared.whMed or {}   -- (published only when it changes)
+	local same = true
+	for q, w in pairs(med) do if was[q] ~= w then same = false end end
+	for q in pairs(was) do if not med[q] then same = false end end
+	if not same then shared.whMed = med end
 	devices()
 	topUp(t)
 end
@@ -579,7 +653,8 @@ function whItemsPostUpdate() end
 ----- client -----
 
 local CI = {snd = {}, anims = {}, journal = nil, readers = {}, marks = {}, markT = -100, note = "", noteT = -100,
-	state = {sensor = 0, cross = 0, med = 0, t = -100}, flameLoop = nil}
+	state = {sensor = 0, cross = 0, med = 0, walkie = true, speaker = true, t = -100}, flameLoop = nil,
+	crouched = {}, bandageT = {}}
 
 local function sl(name, n)
 	local l = {}
@@ -589,6 +664,7 @@ end
 local function pk(l) return l[math.random(1, #l)] end
 
 function whItemsClientInit()
+	whHideToolCounts()                                         -- (each machine's HUD reads its own registry)
 	CI.snd.knife = sl("knife_swing", 2)
 	CI.snd.knifehit = sl("knife_hit", 2)
 	CI.snd.punch = sl("punch", 3)
@@ -600,6 +676,7 @@ function whItemsClientInit()
 	CI.snd.fstart = LoadSound("MOD/snd/flame_start.ogg")
 	CI.snd.fempty = LoadSound("MOD/snd/flame_empty.ogg")
 	CI.snd.stun = LoadSound("MOD/snd/cross_stun.ogg")
+	CI.snd.crack = {LoadSound("wood/break-m0.ogg"), LoadSound("wood/break-m2.ogg")}   -- (the game's own)
 	CI.flameLoop = LoadLoop("MOD/snd/flame_loop.ogg")
 	WH_FX.pickup = function(p, pos) PlaySound(CI.snd.pickup, pos, 0.7) end
 	WH_FX.drop = function(p, pos) PlaySound(CI.snd.pickup, pos, 0.5, false, 0.8) end
@@ -607,7 +684,6 @@ function whItemsClientInit()
 	WH_FX.knifehit = function(p, pos) PlaySound(pk(CI.snd.knifehit), pos, 1.0) end
 	WH_FX.punch = function(p, pos) PlaySound(pk(CI.snd.punch), pos, 0.5, false, 1.2) end
 	WH_FX.punchhit = function(p, pos) PlaySound(pk(CI.snd.punch), pos, 0.9) end
-	WH_FX.medkit = function(p, pos) PlaySound(CI.snd.medkit, pos, 0.8) end
 	WH_FX.sensor = function(p, pos) PlaySound(CI.snd.sensor, pos, 0.8) end
 	WH_FX.journal_open = function(p, pos) PlaySound(CI.snd.jopen, pos, 0.6) end
 	WH_FX.journal_burn = function(p, pos)
@@ -624,6 +700,19 @@ function whItemsClientInit()
 	end
 	WH_FX.flame_start = function(p, pos) PlaySound(CI.snd.fstart, pos, 0.9) end
 	WH_FX.flame_empty = function(p, pos) PlaySound(CI.snd.fempty, pos, 0.8) end
+	WH_FX.crosscrack = function(p, pos)                         -- (its last charge: cracks and crumbles to dust)
+		PlaySound(CI.snd.crack[math.random(1, #CI.snd.crack)], pos, 0.9)
+		for i = 1, 40 do
+			ParticleReset()
+			ParticleType("plain")
+			local g = 0.45 + math.random() * 0.2
+			ParticleColor(g, g * 0.8, g * 0.6)
+			ParticleRadius(0.03 + math.random() * 0.05, 0.01)
+			ParticleGravity(-4)
+			ParticleDrag(0.3)
+			SpawnParticle(pos, Vec((math.random() - 0.5) * 2, math.random() * 1.5, (math.random() - 0.5) * 2), 1.2 + math.random())
+		end
+	end
 	WH_FX.crossflash = function(p, pos)
 		PointLight(pos, 1, 0.95, 0.7, 8)
 		for i = 1, 30 do
@@ -649,8 +738,8 @@ end
 function client.whJournalOf(reader, name, seed, what)
 	if name == "" then CI.readers[reader] = nil else CI.readers[reader] = {name = name, seed = seed, what = what} end
 end
-function client.whItemState(sensorCd, crossCd, med)
-	CI.state = {sensor = sensorCd, cross = crossCd, med = med, t = GetTime()}
+function client.whItemState(sensorCd, crossCd, med, walkieOn, speakerOn)
+	CI.state = {sensor = sensorCd, cross = crossCd, med = med, walkie = walkieOn ~= false, speaker = speakerOn ~= false, t = GetTime()}
 end
 function client.whSensor(list)
 	CI.marks, CI.markT = {}, GetTime()
@@ -701,8 +790,37 @@ local function flameFx(p)
 	SpawnParticle(VecAdd(from, VecScale(f, 3 + math.random() * 3)), Vec(0, 1, 0), 1.5)
 end
 
+-- a medkit being applied (shared.whMed: [healer] = who): the healer crouches (the game's crouch_idle clip, every
+-- machine - as Humans vs Clickers' revive) and the bandage sound plays over them until it is done (the user); their
+-- own camera at crouch height. The server holds them still.
+MED_CAMERA_DROP = 0.6
+local function medClient(playing)
+	local med = playing and type(shared.whMed) == "table" and shared.whMed or {}
+	local t = GetTime()
+	for q in pairs(CI.crouched) do
+		if not med[q] then
+			CI.crouched[q], CI.bandageT[q] = nil, nil
+			SetString("game.override.animation." .. q, "")
+			SetFloat("game.override.animation." .. q .. ".weight", 0)
+		end
+	end
+	for q in pairs(med) do
+		if IsPlayerValid(q) then
+			CI.crouched[q] = true
+			SetString("game.override.animation." .. q, "crouch_idle")
+			SetFloat("game.override.animation." .. q .. ".weight", 1)
+			if t >= (CI.bandageT[q] or 0) then                     -- (back to back: the clip is 1.25 s)
+				CI.bandageT[q] = t + 1.2
+				PlaySound(CI.snd.medkit, VecAdd(GetPlayerTransform(q).pos, Vec(0, 0.6, 0)), 0.8, false, 0.92 + math.random() * 0.16)
+			end
+		end
+	end
+	if med[GetLocalPlayer()] then SetPlayerCameraOffsetTransform(Transform(Vec(0, -MED_CAMERA_DROP, 0))) end
+end
+
 function whItemsClientTick(dt)
 	local e = shared.wh
+	medClient(e and e.phase == "play")
 	if not e or e.phase ~= "play" then return end
 	local me = GetLocalPlayer()
 	for p in Players() do
@@ -737,7 +855,7 @@ end
 JOURNAL_FONT = "MOD/fonts/NothingYouCouldDo.ttf"
 
 local function drawJournal(j)
-	local text = j.name .. (j.what == "human" and " is a human!" or " is a witch!")
+	local text = j.name .. (j.what == "human" and " is a human!" or " is a wraith!")
 	local font = (HasFile(JOURNAL_FONT) and not j.name:find("[\128-\255]")) and JOURNAL_FONT or "bold.ttf"
 	UiPush()
 	UiTranslate(UiCenter(), UiMiddle() - 20)
@@ -810,14 +928,14 @@ function whItemsClientDraw()
 	elseif tool == "wh_knife" then hint(y, "LMB: stab")
 	elseif tool == "wh_fists" then hint(y, "LMB: punch   E: pick up items")
 	elseif tool == "wh_walkie" then
-		hint(y, InputDown("usetool") and "TALKING ON THE WALKIE" or "Hold LMB: talk into the walkie (everyone with one hears you)")
+		hint(y, CI.state.walkie and "WALKIE ON: everyone with one hears you   RMB: off" or "Walkie off   RMB: on (in hand, it carries what you say)")
 		if GetFloat("proxchat.alive") < t - 2 then hint(y + 24, "(needs the Proximity Comms mod)", 0.6) end
 	elseif tool == "wh_speaker" then
-		hint(y, InputDown("usetool") and "SPEAKING THROUGH THE SPEAKERPHONE" or "Hold LMB: speak through it - your voice carries far")
+		hint(y, CI.state.speaker and "SPEAKERPHONE ON: your voice carries far   RMB: off" or "Speakerphone off   RMB: on (in hand, your voice carries far)")
 		if GetFloat("proxchat.alive") < t - 2 then hint(y + 24, "(needs the Proximity Comms mod)", 0.6) end
 	elseif tool == "wh_medkit" then
-		local frac = InputDown("usetool") and math.min(1, (CI.state.med + el) / MEDKIT_TIME) or 0
-		hint(y, "Hold LMB: heal")
+		local frac = (InputDown("usetool") or InputDown("rmb")) and math.min(1, (CI.state.med + el) / MEDKIT_TIME) or 0
+		hint(y, "Hold LMB: heal yourself   Hold RMB: heal the one in front of you")
 		if frac > 0 then
 			UiPush(); UiTranslate(UiCenter() - 100, y + 18); UiColor(0, 0, 0, 0.5); UiRect(200, 8)
 			UiColor(0.4, 1, 0.5, 0.9); UiRect(200 * frac, 8); UiPop()
@@ -825,7 +943,9 @@ function whItemsClientDraw()
 	elseif tool == "wh_flamer" then hint(y, "Hold LMB: fire   (" .. string.format("%.1f", GetToolAmmo("wh_flamer", me)) .. " s of fuel)")
 	elseif tool == "wh_cross" then
 		local cd = math.max(0, CI.state.cross - el)
-		hint(y, cd > 0 and ("the cross recovers in " .. math.ceil(cd) .. " s") or "Hold LMB: raise the cross - a spirit close in front is stunned")
+		local n = math.floor(GetToolAmmo("wh_cross", me) + 0.5)
+		local uses = n == 1 and "   (its last use: then it cracks)" or ("   (" .. n .. " uses)")
+		hint(y, (cd > 0 and ("the cross recovers in " .. math.ceil(cd) .. " s") or "Hold LMB: raise the cross - a wraith in wraith form close in front is stunned") .. uses)
 	elseif tool == "wh_sensor" then
 		local cd = math.max(0, CI.state.sensor - el)
 		hint(y, cd > 0 and ("sensor recharging: " .. math.ceil(cd) .. " s") or "LMB: scan for everyone nearby")

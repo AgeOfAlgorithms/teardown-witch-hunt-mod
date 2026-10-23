@@ -1,39 +1,42 @@
-# Witch Hunt
+# Wraith Hunt
 
 A multiplayer social deduction game mode for [Teardown](https://teardowngame.com). Some of the players are secretly
-witches, and they don't even know each other. Find them before they pick you off.
+wraiths in human form, and they don't even know each other. Find them before they pick you off.
 
 ## How to play
 
-- Pick **Witch Hunt** as the game mode on any map. The host chooses the number of witches, the round time, the amount
+- Pick **Wraith Hunt** as the game mode on any map. The host chooses the number of wraiths, the round time, the amount
   of items and the time of day.
-- At least 3 players. At most a third of them can be witches.
+- At least 3 players. At most a third of them can be wraiths.
 - Everyone is told their role in secret when the round starts. Everyone starts together near the middle of the map.
 - When someone dies, everyone is told 4 seconds later, but not who or which side. The bodies keep their names.
 - The lobby explains the rules. During a round, hold **L** to see your own side's rules and the players.
 
 ### Humans
 
-- Win by killing all the witches, or by preventing them from killing anyone before the time runs out.
-- **Fire reveals a witch:** after 3 seconds in fire she is forced out of her human shape.
-- **Journals** lie around the map. Each one says one thing, who is a witch or who is a human, and only to the person
+- Win by killing all the wraiths, or by preventing them from killing anyone before the time runs out.
+- **Fire reveals a wraith:** after 2 seconds in fire she is forced out of human form into wraith form.
+- **Journals** lie around the map. Each one says one thing, who is a wraith or who is a human, and only to the person
   reading it. Put it down and it crumbles to ash.
 
-### Witches
+### Wraiths
 
 - Kill every human, or kill at least one and survive until the time runs out.
-- **Q: spirit form.** A white spirit for 15 seconds, then 60 seconds to recover. Fly with Space and Crouch, strike with
+- **Q: wraith form.** You leave human form for 15 seconds, then 60 seconds to recover. Fly with Space and Crouch, strike with
   LMB: three strikes kill. Bullets and blades pass through you; fire doesn't.
-- Other witches see your name while you're a spirit. Humans don't.
+- Other wraiths see your name in wraith form. Humans don't.
 - Don't touch a holy cross.
 
 ### Items
 
 - **Pistol**, **knife**, or your bare hands if you have to.
-- **Flamethrower**: enough fuel for about two witches.
-- **Holy cross**: hold it up at a spirit to freeze her in the air.
+- **Flamethrower**: enough fuel for about two wraiths.
+- **Holy cross**: hold it up at a wraith in wraith form to freeze her in the air. It works twice, then cracks.
 - **Sensor**: shows where everyone is for a few seconds.
-- **Medkit**, **walkie-talkie**, **speakerphone**.
+- **Medkit**: hold LMB for 5 seconds to heal yourself, or RMB to heal the player in front of you. You crouch and can't move while you apply it.
+- **Walkie-talkie**: everyone with one hears it, in hand or not. While it's in your hand, what you say or type goes
+  through it; RMB switches it off and on.
+- **Speakerphone**: while it's in your hand, your voice carries far; RMB switches it off and on.
 
 E picks up, G drops.
 
@@ -41,11 +44,11 @@ E picks up, G drops.
 
 Walkie-talkies, the speakerphone and pings need the
 [Proximity Comms](https://github.com/AgeOfAlgorithms/teardown-prox-text-chat-mod) mod, enabled by the host. The dead
-talk only to each other. A ping reaches as far as your talk mode, and a spirit's pin shows no name.
+talk only to each other. A ping reaches as far as your talk mode, and a pin from a wraith in wraith form shows no name.
 
 ## Install
 
-Subscribe on the Steam Workshop, or clone this repository into `Documents/Teardown/mods/witch hunt`. Online play needs
+Subscribe on the Steam Workshop, or clone this repository into `Documents/Teardown/mods/wraith hunt`. Online play needs
 the Workshop version: Teardown's multiplayer only allows published mods.
 
 ## Credits

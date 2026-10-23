@@ -1,5 +1,5 @@
-name = Witch Hunt
+name = Wraith Hunt
 author = AgeOfAlgorithms
-description = Multiplayer horror. Witches hide among the players - find them with journals and fire before they pick you off.
+description = Multiplayer horror. Wraiths in human form hide among the players - find them with journals and fire before they pick you off.
 tags = Gameplay
 version = 2

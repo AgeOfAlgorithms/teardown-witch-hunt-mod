@@ -28,9 +28,10 @@ WH_TEST = false              -- the TEST build (tools/make_test_mod.py): 2 playe
 MIN_PLAYERS = 3
 DEATH_DELAY = 4              -- s after a death before everyone is told (the user)
 INTRO_TIME = 6               -- s the role screen shows (everyone frozen)
-WH_LOADOUT = {{"wh_fists", 0}}
+WH_LOADOUT = {{"wh_fists", 1}}      -- (1: a tool with no ammo can't be selected - wh_items whHideToolCounts)
 WH_PICK_WITCHES = false      -- (the TEST build's autotest: a function(players) -> the witches)
 WH_NO_END = false            -- (the TEST build's autotest: the round goes on with a side wiped out)
+WH_ALIVE_KEY = "witchhunt.alive"   -- GetTime() of the mode's last tick, each machine (the sandbox TEST mod stands aside)
 
 ROUND_KEY = "savegame.mod.wh.roundsec"
 WITCH_KEY = "savegame.mod.wh.witches"
@@ -53,9 +54,9 @@ SETTINGS = {
 	{
 		title = "",
 		items = {
-			{key = WITCH_KEY, label = "Witches", info = "How many witches hide among the players (at most a third of them)",
-				options = steps(1, 4, 1, 1, function(v) return v == 1 and "1 witch" or (v .. " witches") end)},
-			{key = ROUND_KEY, label = "Round time", info = "The witches win if they survive this long",
+			{key = WITCH_KEY, label = "Wraiths", info = "How many wraiths hide among the players (at most a third of them)",
+				options = steps(1, 4, 1, 1, function(v) return v == 1 and "1 wraith" or (v .. " wraiths") end)},
+			{key = ROUND_KEY, label = "Round time", info = "The wraiths win if they survive this long",
 				options = steps(120, 900, 30, 360, function(v) return string.format("%d:%02d", math.floor(v / 60), v % 60) end)},
 			{key = ITEMS_KEY, label = "Items", info = "How many items lie around the map",
 				options = {{label = "Normal", value = 1}, {label = "Many", value = 1.6}, {label = "Few", value = 0.6}}},
@@ -293,6 +294,7 @@ local function chatKeys()
 	end
 end
 PINGANON_VERSION = 16
+PINGSKIP_LOCAL_VERSION = 17     -- (proxchat.pingskip takes local, negative body handles - asked)
 
 -- deaths: who died this frame (everyone is told that someone did, never who), who killed them (the engine's playerdied event, else
 -- the last one who hurt them: wh_spirit / wh_items report with whNoteHurt)
@@ -337,6 +339,7 @@ end
 
 function server.tick(dt)
 	local now = GetTime()
+	SetFloat(WH_ALIVE_KEY, now)
 	chatKeys()
 	if G.phase == "lobby" then
 		for p in Players() do DisablePlayer(p) end
@@ -457,6 +460,7 @@ function whSpectating()
 end
 
 function client.tick(dt)
+	SetFloat(WH_ALIVE_KEY, GetTime())
 	hudTick(dt)
 	SetLowHealthBlurThreshold(0.2)
 	local e = shared.wh
@@ -474,7 +478,11 @@ function client.tick(dt)
 	-- 16: chatKeys). Her ray passes her own model. An older chat would show her name: her ray aims at the empty sky
 	if e and e.phase == "play" and whIsSpirit(GetLocalPlayer()) then
 		if GetInt("proxchat.version") >= PINGANON_VERSION then
-			SetString("proxchat.pingskip", table.concat(whVisualBodies(GetLocalPlayer()), " "))
+			-- her model is spawned on each machine: negative (local) handles, which the chat refused up to API 16 - with
+			-- a warning on screen every frame (the user); sent once it takes them
+			if GetInt("proxchat.version") >= PINGSKIP_LOCAL_VERSION then
+				SetString("proxchat.pingskip", table.concat(whVisualBodies(GetLocalPlayer()), " "))
+			end
 		else
 			local c = GetCameraTransform()
 			SetString("proxchat.aim", string.format("%f %f %f 0 1 0", c.pos[1], c.pos[2] + 2000, c.pos[3]))
@@ -568,17 +576,17 @@ local function drawIntro(e, me)
 	end
 	local a = math.min(1, (GetTime() - C.roleT0) / 0.6)
 	if C.witch then
-		whBigText(UiMiddle() - 70, 72, "YOU ARE A WITCH", 0.85, 0.15, 0.12, a)
+		whBigText(UiMiddle() - 70, 72, "YOU ARE A WRAITH", 0.85, 0.15, 0.12, a)
 		whBigText(UiMiddle() + 5, 26, "Kill every human - or kill at least one and survive until the time runs out.", 0.9, 0.9, 0.9, a)
-		whBigText(UiMiddle() + 45, 22, n > 1 and ("There are " .. n .. " witches. You don't know who the others are.") or
-			"You are the only witch.", 0.8, 0.8, 0.8, a)
-		whBigText(UiMiddle() + 85, 20, "Q: spirit form (15 s, then 60 s to recover) - fly with Space / Crouch, LMB: claw. Fire burns you out.",
+		whBigText(UiMiddle() + 45, 22, n > 1 and ("There are " .. n .. " wraiths. You don't know who the others are.") or
+			"You are the only wraith.", 0.8, 0.8, 0.8, a)
+		whBigText(UiMiddle() + 85, 20, "Q: wraith form (15 s, then 60 s to recover) - fly with Space / Crouch, LMB: claw. Fire burns you out.",
 			0.75, 0.75, 0.75, a)
 	else
 		whBigText(UiMiddle() - 70, 72, "YOU ARE HUMAN", 0.75, 0.85, 1.0, a)
-		whBigText(UiMiddle() + 5, 26, (n > 1 and (n .. " witches hide") or "A witch hides") .. " among you. Kill " ..
+		whBigText(UiMiddle() + 5, 26, (n > 1 and (n .. " wraiths hide") or "A wraith hides") .. " among you. Kill " ..
 			(n > 1 and "them all" or "her") .. " - or prevent " .. (n > 1 and "them" or "her") .. " from killing anyone before the time runs out.", 0.9, 0.9, 0.9, a)
-		whBigText(UiMiddle() + 45, 22, "Journals tell who is a witch - or who is human. Fire forces a witch out of hiding. Holy crosses stun spirits.", 0.8, 0.8, 0.8, a)
+		whBigText(UiMiddle() + 45, 22, "Journals tell who is a wraith - or who is human. Fire forces a wraith out of hiding. Holy crosses stun them.", 0.8, 0.8, 0.8, a)
 		whBigText(UiMiddle() + 85, 20, "E: pick up   G: drop   Don't trust anyone.", 0.75, 0.75, 0.75, a)
 	end
 	whBigText(UiHeight() - 80, 22, "The hunt begins in " .. math.ceil(e.t or 0), 0.8, 0.8, 0.8, 0.9)
@@ -607,15 +615,15 @@ local function drawPlay(e, me)
 		UiTranslate(40, 40)
 		UiAlign("left middle")
 		UiFont("bold.ttf", 22)
-		if C.witch then UiColor(0.9, 0.25, 0.2, 0.9); UiText("WITCH") else UiColor(0.75, 0.85, 1, 0.9); UiText("HUMAN") end
+		if C.witch then UiColor(0.9, 0.25, 0.2, 0.9); UiText("WRAITH") else UiColor(0.75, 0.85, 1, 0.9); UiText("HUMAN") end
 		UiTranslate(0, 26)
 		UiFont("regular.ttf", 18)
 		UiColor(0.85, 0.85, 0.85, 0.75)
-		UiText((e.n or 1) == 1 and "1 witch in this round" or ((e.n or 1) .. " witches in this round"))
+		UiText((e.n or 1) == 1 and "1 wraith in this round" or ((e.n or 1) .. " wraiths in this round"))
 		if C.witch and C.needKill then
 			UiTranslate(0, 24)
 			UiColor(1, 0.45, 0.4, 0.85)
-			UiText("No human has died at a witch's hand yet - kill one before the time runs out")
+			UiText("No human has died at a wraith's hand yet - kill one before the time runs out")
 		end
 		UiTranslate(0, 24)
 		UiColor(0.85, 0.85, 0.85, 0.55)
@@ -627,7 +635,7 @@ end
 
 local function resultGroups(e)
 	local groups = {
-		{name = "Witches", color = {0.85, 0.2, 0.15}, rows = {}},
+		{name = "Wraiths", color = {0.85, 0.2, 0.15}, rows = {}},
 		{name = "Humans", color = {0.35, 0.65, 1.0}, rows = {}},
 	}
 	for p in Players() do
@@ -648,11 +656,11 @@ local RESULT_COLUMNS = {{name = "Status", align = "center"}, {name = "Kills", al
 local function drawResults(e)
 	local groups = resultGroups(e)
 	local win = e.winner == "witches"
-	local banner = win and "THE WITCHES WIN" or "THE HUMANS WIN"
+	local banner = win and "THE WRAITHS WIN" or "THE HUMANS WIN"
 	local color = win and {0.5, 0.06, 0.08, 0.8} or {0.15, 0.35, 0.6, 0.8}
 	if win then groups[2].dim = true else groups[1].dim = true; groups[1], groups[2] = groups[2], groups[1] end
 	local th, tw = GetInt("witchhunt.tally.h"), GetInt("witchhunt.tally.w")
-	hudDrawResults(banner, color, string.format("Witch Hunt   (this session: humans %d, witches %d)", th, tw), RESULT_COLUMNS, groups)
+	hudDrawResults(banner, color, string.format("Wraith Hunt   (this session: humans %d, wraiths %d)", th, tw), RESULT_COLUMNS, groups)
 end
 
 -- Proximity Comms (HvC's lobby chat): Enter opens it through its API; while typing the lobby isn't drawn
@@ -678,21 +686,21 @@ local function chattingNote()
 end
 
 -- the rules (the user: the lobby explains the game; L in the round shows your side's)
-RULES_INTRO = "Some of you are secretly witches - and the witches don't know each other. When someone dies, everyone hears it - but not who."
+RULES_INTRO = "Some of you are secretly wraiths in human form - and the wraiths don't know each other. When someone dies, everyone hears it - but not who."
 RULES_HUMAN = {
-	"Win by killing all the witches, or by preventing them from killing anyone before the time runs out.",
-	"Fire reveals a witch: 3 s in fire forces her out of her human shape.",
-	"Journals say who is a witch - or who is human - to the reader only. Put one down and it crumbles.",
-	"Hold a holy cross up (LMB) at a spirit to freeze it.",
-	"Pistol, knife, flamethrower (fuel for about two witches), medkit, sensor, walkie-talkie, speakerphone.",
+	"Win by killing all the wraiths, or by preventing them from killing anyone before the time runs out.",
+	"Fire reveals a wraith: 2 s in fire forces her out of human form into wraith form.",
+	"Journals say who is a wraith - or who is human - to the reader only. Put one down and it crumbles.",
+	"Hold a holy cross up (LMB) at a wraith in wraith form to freeze her. It works twice, then cracks.",
+	"Pistol, knife, flamethrower (fuel for about two wraiths), medkit, sensor, walkie-talkie, speakerphone.",
 	"E: pick up   G: drop",
 }
 RULES_WITCH = {
 	"Kill every human - or kill at least one and survive until the time runs out.",
-	"Q: spirit form for 15 s, then 60 s to recover. Fly with Space / Crouch.",
-	"As a spirit, LMB claws: three strikes kill. Bullets and blades pass through you.",
-	"Fire hurts you in either form - and 3 s in fire throws you out of hiding.",
-	"Other witches see your name while you are a spirit. Humans don't.",
+	"Q: wraith form for 15 s, then 60 s to recover. Fly with Space / Crouch.",
+	"In wraith form, LMB claws: three strikes kill. Bullets and blades pass through you.",
+	"Fire hurts you in either form - and 2 s in fire throws you out of human form.",
+	"Other wraiths see your name in wraith form. Humans don't.",
 	"Never touch a holy cross.",
 }
 
@@ -758,7 +766,7 @@ local function drawLobbyRules()
 	UiPop()
 	UiPush()
 	UiTranslate(UiCenter() + 200, UiMiddle() - 240)
-	whDrawRules(w, "WITCHES", WITCH_RGB, RULES_WITCH)
+	whDrawRules(w, "WRAITHS", WITCH_RGB, RULES_WITCH)
 	UiPop()
 	UiPop()
 end
@@ -770,7 +778,7 @@ function whDrawRoundRules(e)
 	UiPush()
 	UiTextDisableWildcards(true)
 	UiTranslate(UiCenter() - w - 20, UiMiddle() - 220)
-	whDrawRules(w, witch and "YOU ARE A WITCH" or "YOU ARE HUMAN", witch and WITCH_RGB or HUMAN_RGB, witch and RULES_WITCH or RULES_HUMAN, 21)
+	whDrawRules(w, witch and "YOU ARE A WRAITH" or "YOU ARE HUMAN", witch and WITCH_RGB or HUMAN_RGB, witch and RULES_WITCH or RULES_HUMAN, 21)
 	UiPop()
 	local names = {}
 	for p in Players() do
@@ -779,7 +787,7 @@ function whDrawRoundRules(e)
 	UiPush()
 	UiTextDisableWildcards(true)
 	UiTranslate(UiCenter() + 20, UiMiddle() - 220)
-	whDrawRules(360, "PLAYERS (" .. (e.n or 1) .. (e.n == 1 and " witch)" or " witches)"), {0.85, 0.87, 0.9}, names, 21)
+	whDrawRules(360, "PLAYERS (" .. (e.n or 1) .. (e.n == 1 and " wraith)" or " wraiths)"), {0.85, 0.87, 0.9}, names, 21)
 	UiPop()
 end
 
@@ -801,7 +809,7 @@ local function drawLobby(e)
 	end
 	UiPop()
 	if n < need or (e and e.lobbyMsg) then
-		whBigText(UiMiddle() + 270, 22, "Witch Hunt needs at least " .. need .. " players (" .. n .. " here)",
+		whBigText(UiMiddle() + 270, 22, "Wraith Hunt needs at least " .. need .. " players (" .. n .. " here)",
 			1, (e and e.lobbyMsg) and 0.4 or 0.85, (e and e.lobbyMsg) and 0.35 or 0.85, 0.9)
 	end
 	chatHint()

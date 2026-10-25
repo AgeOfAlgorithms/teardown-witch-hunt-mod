@@ -10,6 +10,7 @@
 #include "wh_spirit_visual.lua"
 #include "wh_spirit.lua"
 #include "wh_items.lua"
+#include "wh_mantle.lua"
 
 -- Witch Hunt: the game mode (gamemodes.txt; any map). Some players are secretly witches; they don't know each other.
 -- Lobby (mplib): the host sets the number of witches, the round time, the item amount and the time of day. A round:
@@ -125,6 +126,7 @@ function server.init()
 	if #spawns == 0 then spawns = utilGenerateSpawnPoints(32) end
 	hudInit(true)
 	spawnInit()
+	mantleServerInit()
 	spawnSetRespawnTime(99999)                                   -- (nobody comes back during a round)
 	spawnSetDefaultLoadout(WH_LOADOUT)
 	whSpiritServerInit()
@@ -294,7 +296,6 @@ local function chatKeys()
 	end
 end
 PINGANON_VERSION = 16
-PINGSKIP_LOCAL_VERSION = 17     -- (proxchat.pingskip takes local, negative body handles - asked)
 
 -- deaths: who died this frame (everyone is told that someone did, never who), who killed them (the engine's playerdied event, else
 -- the last one who hurt them: wh_spirit / wh_items report with whNoteHurt)
@@ -401,8 +402,16 @@ function server.tick(dt)
 end
 
 function server.update(dt)
+	mantleServerUpdate(dt)
 	if G.phase == "play" then whSpiritUpdate(dt) end
 end
+
+-- mantling (wh_mantle.lua, as Humans vs Clickers): not in wraith form (she flies) nor while applying a medkit (held
+-- still), nor outside the round; its rays pass through the wraith models (WV_SHAPES: on the host they share the scene)
+function mantleBlocked(p)
+	return whServerIsSpirit(p) or not whInRound(p) or (type(shared.whMed) == "table" and shared.whMed[p] ~= nil)
+end
+function mantleQueryMask() if #WV_SHAPES > 0 then QueryRejectShapes(WV_SHAPES) end end
 
 function server.postUpdate()
 	if G.phase == "play" then whItemsPostUpdate() end
@@ -473,16 +482,18 @@ function client.tick(dt)
 	end
 	whSpiritClientTick(dt)
 	whItemsClientTick(dt)
+	mantleClientTick(true)                                       -- (wh_mantle.lua: the pull-up's camera dip)
 	-- pings (Proximity Comms: as far as the pinger's talk mode): no teams - witches ping as everyone does, spirits too,
 	-- and whoever stands near sees it (the user: witches mind where they stand), without her name (proxchat.pinganon, API
 	-- 16: chatKeys). Her ray passes her own model. An older chat would show her name: her ray aims at the empty sky
 	if e and e.phase == "play" and whIsSpirit(GetLocalPlayer()) then
 		if GetInt("proxchat.version") >= PINGANON_VERSION then
-			-- her model is spawned on each machine: negative (local) handles, which the chat refused up to API 16 - with
-			-- a warning on screen every frame (the user); sent once it takes them
-			if GetInt("proxchat.version") >= PINGSKIP_LOCAL_VERSION then
-				SetString("proxchat.pingskip", table.concat(whVisualBodies(GetLocalPlayer()), " "))
-			end
+			-- her model is spawned on each machine: negative (local) handles, which the chat refuses with a warning on
+			-- screen every frame (the user; still so in API 17, 2026-10-24 - a version gate guessed wrong once): only
+			-- handles it takes are sent, so none for now (her pin may land on her own model in first person)
+			local skip = {}
+			for _, b in ipairs(whVisualBodies(GetLocalPlayer())) do if b > 0 then skip[#skip + 1] = b end end
+			if #skip > 0 then SetString("proxchat.pingskip", table.concat(skip, " ")) end
 		else
 			local c = GetCameraTransform()
 			SetString("proxchat.aim", string.format("%f %f %f 0 1 0", c.pos[1], c.pos[2] + 2000, c.pos[3]))
@@ -507,10 +518,13 @@ end
 
 -- names over players (ours; the engine's nameplates are off during the round): a living player in plain sight shows
 -- their name - except a spirit, whose name only witches see. The dead and late joiners see what a human sees.
+-- a living player's name: only on screen, in plain sight (nothing solid between your view and them - mplib's
+-- hudDrawWorldMarkers casts the ray) and under NAME_RANGE m away (the user: 40 m or more, no name)
+NAME_RANGE = 40
 local function nameMarker(p, color)
 	local up = GetPlayerUp(p)
 	return {pos = VecAdd(GetPlayerTransform(p).pos, up), offset = VecScale(up, 1.2), color = color, label = GetPlayerName(p),
-		lineOfSightRequired = true, maxRange = 40.0, icon = "ui/hud/team-direction.png", drawIconInView = false, player = p}
+		lineOfSightRequired = true, maxRange = NAME_RANGE - 0.01, icon = "ui/hud/team-direction.png", drawIconInView = false, player = p}
 end
 
 local function drawNames(e, me)
@@ -852,6 +866,7 @@ end
 
 function client.postUpdate(dt)
 	whItemsClientPostUpdate(dt)
+	mantleClientPostUpdate()
 end
 
 ----- the time of day (HvC's copy of the game's data/script/weather.lua presets; server) -----

@@ -168,14 +168,22 @@ local function spawnAt(kind, pos)
 	return spawnItem(kind, Transform(VecAdd(pos, Vec(0, 0.25, 0)), QuatEuler(0, math.random() * 360, 0)), defaultAmmo(kind))
 end
 
+START_LESS = {medkit = 2, sensor = 1}   -- these start this many below their most; the others at 0.7 of it (the rest: top-ups)
+function whStartCount(k, most)
+	if START_LESS[k] then return math.max(1, most - START_LESS[k]) end
+	return math.max(1, math.floor(most * 0.7 + 0.5))
+end
 local function stockFor(n, area, mult)
 	local a = math.max(0.4, math.min(4, area / 40000))          -- (a 200 x 200 m map = 1)
 	local s = math.sqrt(a)
 	local function c(x, lo) return math.max(lo or 1, math.floor(x * mult + 0.5)) end
+	-- (the user, 2026-10-22, on a 200 m map, start - most: medkits 2-4 with 6 players, 4-6 with 10; journals 2-3 with
+	-- 4 players, 3-4 with 6, 4-5 with 10; sensors 1-2 with 4 players, 2-3 with 6, 3-4 with 10)
 	return {gun = c(n * 0.25 * s), knife = c(n * 0.3 * s), walkie = c(math.max(2, n * 0.5), 2), speaker = c(s),
-		medkit = c(n * 0.35 * s), journal = c(1.5 + a * 1.5, 2), flamer = c(n >= 9 and 2 or 1), cross = c(n * 0.2 * s),
-		sensor = c(n >= 8 and 2 or 1)}
+		medkit = c((n * 0.5 + 1) * s), journal = c((n * 0.25 + 2.4) * s, 2),
+		flamer = c(n >= 9 and 2 or 1), cross = c(n * 0.2 * s), sensor = c((n * 0.3 + 0.8) * s)}
 end
+function whStockFor(n, area, mult) return stockFor(n, area, mult) end   -- (the tests)
 
 local function clearWorld()
 	for b, it in pairs(IS.world) do
@@ -201,7 +209,7 @@ function whItemsBeginRound(nPlayers, mult)
 	IS.spots = spots
 	local total = 0
 	for _, k in ipairs(ITEM_KINDS) do
-		local first = math.max(1, math.floor(IS.stock[k] * 0.7 + 0.5))
+		local first = whStartCount(k, IS.stock[k])
 		for i = 1, first do
 			local pos = pickSpot(8)
 			if pos and spawnAt(k, pos) then total = total + 1 end

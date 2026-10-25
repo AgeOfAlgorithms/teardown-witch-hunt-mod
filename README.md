@@ -38,7 +38,7 @@ wraiths in human form, and they don't even know each other. Find them before the
   through it; RMB switches it off and on.
 - **Speakerphone**: while it's in your hand, your voice carries far; RMB switches it off and on.
 
-E picks up, G drops.
+E picks up, G drops. Walk or jump into a ledge up to chest height and you climb onto it (hold Crouch to let go).
 
 ## Voice, chat and pings
 
